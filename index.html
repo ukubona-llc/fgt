@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blindly Shuffling Down the Gradient · FGT & the Two Times</title>
+  <meta name="description" content="Decision time vs learning time — why γ|ε_FGT|² is gradient descent, and why the ground truth is literally the ground.">
+  <meta name="color-scheme" content="dark">
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,800;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,300&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:              #0e0e0f;
+      --glass:           rgba(255,255,255,0.04);
+      --border:          rgba(255,255,255,0.09);
+      --text:            #f0ede8;
+      --text-secondary:  rgba(240,237,232,0.55);
+      --accent:          #4fc3f7;
+      --phase-T:         #6faee8;
+      --phase-M:         #7ecbaa;
+      --phase-V:         #e8b84b;
+      --phase-E:         #c49ae8;
+      --phase-S:         #e87060;
+      --ff-display:      'Playfair Display', Georgia, serif;
+      --ff-body:         'Source Serif 4', Georgia, serif;
+      --ff-ui:           'Inter', sans-serif;
+      --ff-mono:         'Source Code Pro', 'IBM Plex Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-family: var(--ff-body);
+      font-weight: 300;
+      font-size: 18px;
+      line-height: 1.8;
+      min-height: 100vh;
+    }
+
+    /* ── scroll spine ── */
+    .spine {
+      position: fixed; left: 0; top: 0; width: 3px; height: 0%;
+      background: var(--accent); z-index: 200; transition: height .1s linear;
+    }
+
+    /* ── layout ── */
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 6rem 2rem 8rem;
+    }
+
+    @media (max-width: 600px) {
+      .page { padding: 4rem 1.25rem 6rem; }
+    }
+
+    /* ── label ── */
+    .label {
+      font-family: var(--ff-ui); font-size: .52rem; letter-spacing: .28em;
+      text-transform: uppercase; color: var(--accent); opacity: .6;
+      display: flex; align-items: center; gap: .5rem; margin-bottom: 2rem;
+    }
+    .label::before {
+      content: ''; display: inline-block; width: 18px; height: 1px;
+      background: var(--accent); opacity: .5;
+    }
+
+    /* ── hero ── */
+    .hero { margin-bottom: 4rem; }
+    .hero-kicker {
+      font-family: var(--ff-ui); font-size: .6rem; letter-spacing: .3em;
+      text-transform: uppercase; color: var(--accent); font-weight: 600;
+      margin-bottom: .75rem;
+    }
+    .hero-title {
+      font-family: var(--ff-display); font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+      color: var(--text); margin-bottom: .75rem;
+    }
+    .hero-subtitle {
+      font-family: var(--ff-display); font-size: clamp(1rem, 2.5vw, 1.3rem);
+      font-style: italic; font-weight: 400; color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+    }
+    .hero-rule {
+      width: 40px; height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      border: none; margin: 0;
+    }
+
+    /* ── prose ── */
+    .prose { margin-bottom: 2rem; }
+    .prose p { margin-bottom: 1.25rem; font-size: clamp(.95rem, 2vw, 1.05rem); }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose strong { color: var(--text); font-weight: 600; }
+    .prose em { font-style: italic; }
+
+    /* ── inline code ── */
+    code {
+      font-family: var(--ff-mono); font-size: .88em;
+      padding: 1px 5px; border-radius: 3px;
+    }
+    code.T { background: color-mix(in srgb, var(--phase-T) 12%, transparent); color: var(--phase-T); }
+    code.M { background: color-mix(in srgb, var(--phase-M) 12%, transparent); color: var(--phase-M); }
+    code.V { background: color-mix(in srgb, var(--phase-V) 12%, transparent); color: var(--phase-V); }
+    code.E { background: color-mix(in srgb, var(--phase-E) 12%, transparent); color: var(--phase-E); }
+    code.S { background: color-mix(in srgb, var(--phase-S) 12%, transparent); color: var(--phase-S); }
+    code.A { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+
+    /* ── pull quote ── */
+    .pull {
+      border-left: 3px solid color-mix(in srgb, var(--accent) 40%, transparent);
+      padding: 1rem 1.5rem; margin: 2rem 0;
+      background: color-mix(in srgb, var(--accent) 5%, transparent);
+      border-radius: 0 8px 8px 0;
+      font-family: var(--ff-display); font-style: italic;
+      font-size: clamp(.95rem, 1.8vw, 1.1rem); color: var(--text); line-height: 1.7;
+    }
+    .pull .pull-label {
+      font-family: var(--ff-ui); font-style: normal;
+      font-size: .52rem; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--accent); display: block; margin-bottom: .5rem; opacity: .8;
+    }
+
+    /* ── phase pull — coloured variant ── */
+    .pull-V {
+      border-left-color: color-mix(in srgb, var(--phase-V) 50%, transparent);
+      background: color-mix(in srgb, var(--phase-V) 5%, transparent);
+    }
+    .pull-V .pull-label { color: var(--phase-V); }
+
+    /* ── two-column compare ── */
+    .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: .75rem;
+      margin: 2rem 0;
+    }
+    @media (max-width: 500px) { .compare { grid-template-columns: 1fr; } }
+    .compare-card {
+      padding: .9rem 1rem; border-radius: 8px;
+    }
+    .compare-card-label {
+      font-family: var(--ff-ui); font-size: .52rem; letter-spacing: .18em;
+      text-transform: uppercase; font-weight: 700; margin-bottom: .45rem;
+    }
+    .compare-card p {
+      font-family: var(--ff-ui); font-size: .78rem; line-height: 1.6;
+      color: var(--text-secondary);
+    }
+    .card-V {
+      background: color-mix(in srgb, var(--phase-V) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--phase-V) 25%, transparent);
+    }
+    .card-V .compare-card-label { color: var(--phase-V); }
+    .card-E {
+      background: color-mix(in srgb, var(--phase-E) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--phase-E) 25%, transparent);
+    }
+    .card-E .compare-card-label { color: var(--phase-E); }
+
+    /* ── equation table ── */
+    .eq-table {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; margin: 2rem 0;
+    }
+    .eq-row {
+      display: grid; grid-template-columns: auto 1fr;
+    }
+    .eq-row + .eq-row { border-top: 1px solid var(--border); }
+    .eq-sym {
+      padding: .8rem 1rem;
+      border-right: 1px solid var(--border);
+      background: color-mix(in srgb, var(--phase-E) 8%, transparent);
+      font-family: var(--ff-mono); font-size: .85rem; color: var(--phase-E);
+      white-space: nowrap; display: flex; align-items: center;
+    }
+    .eq-desc {
+      padding: .8rem 1rem;
+      font-family: var(--ff-ui); font-size: .78rem;
+      color: var(--text-secondary); line-height: 1.6;
+      display: flex; align-items: center;
+    }
+    .eq-footer {
+      padding: .75rem 1.25rem; border-top: 1px solid var(--border);
+      background: color-mix(in srgb, var(--phase-E) 4%, transparent);
+      font-family: var(--ff-mono); font-size: .78rem;
+      color: var(--text-secondary); letter-spacing: .03em; line-height: 1.7;
+    }
+    .eq-footer .eq-note {
+      font-family: var(--ff-ui); font-size: .65rem;
+      color: var(--text-secondary); opacity: .5; margin-left: 1rem;
+    }
+
+    /* ── institution card ── */
+    .inst-card {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.1rem 1.25rem; margin: 2rem 0;
+    }
+    .inst-card-label {
+      font-family: var(--ff-ui); font-size: .52rem; letter-spacing: .2em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: .65rem; font-weight: 700;
+    }
+    .inst-card p {
+      font-family: var(--ff-ui); font-size: .82rem;
+      line-height: 1.65; color: var(--text-secondary);
+    }
+
+    /* ── closing aphorism ── */
+    .aphorism {
+      border-left: 3px solid color-mix(in srgb, var(--accent) 40%, transparent);
+      padding: 1.25rem 1.75rem; margin-top: 3rem;
+      background: color-mix(in srgb, var(--accent) 5%, transparent);
+      border-radius: 0 8px 8px 0;
+      font-family: var(--ff-display); font-style: italic;
+      font-size: clamp(1.05rem, 2vw, 1.25rem); color: var(--text); line-height: 1.7;
+    }
+    .aphorism .aphorism-note {
+      display: block; margin-top: .5rem;
+      font-family: var(--ff-ui); font-style: normal;
+      font-size: .65rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); opacity: .6;
+    }
+
+    /* ── section divider ── */
+    .divider {
+      display: flex; align-items: center; gap: 1rem;
+      margin: 3rem 0;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    .divider-sym {
+      font-family: var(--ff-mono); font-size: .75rem;
+      color: var(--accent); opacity: .4;
+    }
+
+    /* ── footer ── */
+    .foot {
+      margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border);
+      font-family: var(--ff-ui); font-size: .65rem; letter-spacing: .08em;
+      color: var(--text-secondary); opacity: .4; line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+
+<div class="spine" id="spine"></div>
+
+<div class="page">
+
+  <div class="label">Ukubona LLC · v4 TMVES · Interlude</div>
+
+  <!-- ── HERO ── -->
+  <div class="hero">
+    <p class="hero-kicker">Decision time vs Learning time</p>
+    <h1 class="hero-title">Blindly Shuffling Down the Gradient</h1>
+    <p class="hero-subtitle">Why γ|ε_FGT|² is gradient descent, and why the ground truth is literally the ground</p>
+    <hr class="hero-rule">
+  </div>
+
+  <!-- ── SECTION 1: THE QUESTION ── -->
+  <div class="pull pull-V">
+    <span class="pull-label">The question</span>
+    What is decision time vs learning time?
+  </div>
+
+  <div class="prose">
+    <p>
+      <strong>Decision time (ex-ante)</strong> is the moment you have to act with whatever information exists <em>right now</em>. You don't have the outcome yet. You don't know if you're right. You commit anyway — a recommendation, a policy brief, a screening decision. Phase III <code class="V">f(σ²,λ,ε)</code> lives here. It asks: given current uncertainty σ², how aggressively should I move?
+    </p>
+    <p>
+      <strong>Learning time (ex-post)</strong> is <em>after</em> the outcome arrives. Now you know whether the recommendation was correct. The federated ground truth <code class="E">ε_FGT = y_true − y_pred</code> tells you the error. Phase IV <code class="E">γ|ε_FGT|²</code> lives here. It uses that error to update the weights — to make the <em>next</em> decision better.
+    </p>
+    <p>
+      The v4 insight is that <strong>these two moments are not the same</strong> — and confusing them is the most common mistake in evidence-based policy. If FGT hasn't arrived, weight updates are frozen. <strong>Hold.</strong>
+    </p>
+  </div>
+
+  <!-- ── COMPARE ── -->
+  <div class="compare">
+    <div class="compare-card card-V">
+      <div class="compare-card-label">Decision time · PM-JAY</div>
+      <p>You write a policy brief on PM-JAY financial protection. <code class="A">FGT=∅</code> — the ground truth hasn't arrived yet. You act under uncertainty.</p>
+    </div>
+    <div class="compare-card card-E">
+      <div class="compare-card-label">Learning time · PM-JAY</div>
+      <p>One year later, household surveys show whether financial protection actually improved. Now <code class="E">ε_FGT</code> is computable. Now the weights update.</p>
+    </div>
+  </div>
+
+  <div class="divider"><span class="divider-sym">∂</span></div>
+
+  <!-- ── SECTION 2: GRADIENT DESCENT ── -->
+  <div class="pull pull-V">
+    <span class="pull-label">Realisation</span>
+    γ|ε_FGT|² — this fella is like gradient descent, no wonder "learning time" … each baby step :)
+  </div>
+
+  <div class="prose">
+    <p>
+      Exactly. <code class="E">γ|ε_FGT|²</code> is gradient descent in disguise. Break it down:
+    </p>
+  </div>
+
+  <!-- ── EQUATION TABLE ── -->
+  <div class="eq-table">
+    <div class="eq-row">
+      <div class="eq-sym">ε_FGT</div>
+      <div class="eq-desc">The error signal — gap between what you predicted and what actually happened. In gradient descent: <code class="E">y_pred − y_true</code>, the thing you're trying to minimise.</div>
+    </div>
+    <div class="eq-row">
+      <div class="eq-sym">|ε_FGT|²</div>
+      <div class="eq-desc">Squared — always positive, and big errors penalised disproportionately. A slightly wrong policy costs a little. A catastrophically wrong one costs enormously.</div>
+    </div>
+    <div class="eq-row">
+      <div class="eq-sym">γ</div>
+      <div class="eq-desc">The learning rate — exactly η in vanilla gradient descent. Too high: you overshoot. Too low: you never learn.</div>
+    </div>
+    <div class="eq-footer">
+      w_ijk(t+1) = w_ijk(t) − γ · ∂|ε_FGT|²/∂w_ijk
+      <span class="eq-note">← textbook backprop</span>
+    </div>
+  </div>
+
+  <div class="prose">
+    <p>
+      The "baby step" intuition is exactly right — and it's <em>why</em> learning time has to be separate from decision time. Gradient descent only works if you let the loss actually compute before you take the next step. If you update weights before <code class="E">ε_FGT</code> arrives, you're descending on a phantom gradient. The v4 architecture enforces patience: <strong>wait for the real signal, then step.</strong>
+    </p>
+    <p>
+      That's the whole discipline of evidence-based policy in one equation.
+    </p>
+  </div>
+
+  <div class="divider"><span class="divider-sym">∂</span></div>
+
+  <!-- ── SECTION 3: BLINDLY SHUFFLING ── -->
+  <div class="pull pull-V">
+    <span class="pull-label">Going deeper</span>
+    It's literally "ground" truth — feeling the feedback in each step as you blindly shuffle down the gradient.
+  </div>
+
+  <div class="prose">
+    <p>
+      <em>Blindly shuffling down the gradient.</em> That is the most honest description of learning there is.
+    </p>
+    <p>
+      And "ground" truth is doing double duty — it's both <strong>grounded</strong> in reality, empirical, what actually happened out there in the world — and <strong>the ground</strong> of the gradient, the terrain you're descending, the loss landscape <code class="S">L(θᵗ⁺¹)</code> that reshapes itself under your feet with every step.
+    </p>
+    <p>
+      The blindness is key. You don't see the whole landscape. You only feel the local slope — the gradient at your current position. That's all <code class="E">ε_FGT</code> gives you: not "here is the truth," but <em>"you were off by this much, in this direction, at this step."</em> The next step is still blind. You just start it from a slightly better place.
+    </p>
+    <p>
+      And that's why the loop closes at Phase V back into Phase I — <code class="S">L(θᵗ⁺¹)</code> feeds into the next <code class="T">θᵗ</code>. The updated prior is just your new position on the slope. The next literature review, the next policy brief, the next recommendation — all begin from wherever the last correction landed you.
+    </p>
+  </div>
+
+  <!-- ── INSTITUTION CARD ── -->
+  <div class="inst-card">
+    <div class="inst-card-label">This is true of institutions too — not just models</div>
+    <p>
+      WHO India shuffles down this gradient review by review, brief by brief, outcome by outcome. The FGT isn't a number in a spreadsheet — it's whether the coverage expanded, whether catastrophic expenditure fell, whether the Joint Secretary's bet paid off.
+    </p>
+  </div>
+
+  <!-- ── CLOSING APHORISM ── -->
+  <div class="aphorism">
+    Okubala si Kulaba — to count the steps is not to see the mountain.
+    <span class="aphorism-note">Luganda · Ukubona LLC · v4 TMVES</span>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <div class="foot">
+    Generated from a live conversation between a human and Claude · Ukubona LLC · v4 TMVES compression chain ·
+    Decision time = Phase III f(σ²,λ,ε) · Learning time = Phase IV γ|ε_FGT|² ·
+    The loop closes at L(θᵗ⁺¹)
+  </div>
+
+</div>
+
+<script>
+  const spine = document.getElementById('spine');
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
+    spine.style.height = Math.min(pct, 100) + '%';
+  }, { passive: true });
+</script>
+
+</body>
+</html>
